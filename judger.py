@@ -51,6 +51,9 @@ class Judger:
         }
         for signal in special_signal_map:
             final_answer = final_answer.replace(signal, special_signal_map[signal])
+        # Normalize \dfrac and \tfrac to \frac so parse_latex can handle them
+        final_answer = final_answer.replace("\\dfrac", "\\frac")
+        final_answer = final_answer.replace("\\tfrac", "\\frac")
         final_answer = re.sub(r'\\(?:mathrm|mathbf)\{~?([^}]*)\}', '\\1', final_answer)
         final_answer = re.sub(r'(\\text\{)(.*?)(\})', '\\2', final_answer)
         final_answer = re.sub(r'(\\textbf\{)(.*?)(\})', '\\2', final_answer)
@@ -256,6 +259,10 @@ class Judger:
         for rm_str in SIMPLE_RM_STRS:
             string = string.replace(rm_str, "")
 
+        # Normalize \dfrac and \tfrac to \frac
+        string = string.replace("\\dfrac", "\\frac")
+        string = string.replace("\\tfrac", "\\frac")
+
         # Simple replacements
         for k, v in SIMPLE_REPLACE_MAP.items():
             string = string.replace(k, v)
@@ -401,6 +408,9 @@ class Judger:
         """Removes preceding punctuation marks from a string."""
         s = str(s).strip()
         while s != "" and s[0] in NO_PRECEDING_PUNCS:
+            # Don't strip backslash if it's the start of a LaTeX command
+            if s[0] == '\\' and len(s) > 1 and s[1].isalpha():
+                break
             s = s[1:].strip()
 
         return s
@@ -415,10 +425,61 @@ class Judger:
             s = s[:-1].strip()
         return s
 
+    def extract_all_boxed(self, text):
+        """Extract \\boxed{...} contents from the last contiguous group in text."""
+        # Find all boxed answers with their positions
+        entries = []
+        start = 0
+        while True:
+            idx = text.find("\\boxed{", start)
+            if idx < 0:
+                break
+            brace_start = idx + len("\\boxed{")
+            depth = 1
+            i = brace_start
+            while i < len(text) and depth > 0:
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                i += 1
+            if depth == 0:
+                content = text[brace_start:i - 1]
+                if content:
+                    entries.append((idx, i, self.normalize_answer(content)))
+            start = i
+
+        if not entries:
+            return []
+
+        # Take only the last contiguous group of \boxed{} answers.
+        # Two boxed answers are "contiguous" if the text between them
+        # contains only whitespace, commas, punctuation, $, or newlines.
+        last_group = [entries[-1]]
+        for j in range(len(entries) - 2, -1, -1):
+            gap = text[entries[j][1]:entries[j + 1][0]]
+            # Allow only whitespace, commas, $, and common separators between boxes
+            if re.match(r'^[\s,\$\.\;\:\-\&\\]*$', gap):
+                last_group.insert(0, entries[j])
+            else:
+                break
+
+        return [e[2] for e in last_group]
+
     def extract_boxed_answer(self, text):
         # extract answer wrapped in \boxed{} from models' output
-        # TODO: add other extraction pattern
-        # last boxed only
+        # Strip thinking tags — only look at content after last </think>
+        think_end = text.rfind("</think>")
+        search_text = text[think_end + len("</think>"):] if think_end >= 0 else text
+
+        # Try to extract all boxed answers from the final answer section
+        all_boxed = self.extract_all_boxed(search_text)
+        if len(all_boxed) > 1:
+            return ", ".join(all_boxed)
+        elif len(all_boxed) == 1:
+            return all_boxed[0]
+
+        # Fallback: last boxed only (search full text)
         content = remove_boxed(last_boxed_only_string(text))
         if content == None:
             match = re.search(r'\\boxed{', text)
