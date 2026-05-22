@@ -757,6 +757,16 @@ class Judger:
                 return True
         except:
             pass
+        # handle plain fraction strings like "3/4" that float() can't parse
+        try:
+            from fractions import Fraction
+            pred_value = float(Fraction(pred))
+            gold_value = float(Fraction(gold))
+            denom = abs(gold_value) if gold_value != 0 else 1
+            if abs((pred_value - gold_value) / denom) <= self.precision * 1.01:
+                return True
+        except:
+            pass
         # cannot be parsed by python, use scipy expression to judge
         # like 2^5, \log _2 7
         try:
