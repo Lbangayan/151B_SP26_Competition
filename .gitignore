@@ -4,3 +4,4 @@ results
 data
 __pycache__
 LICENSE
+.DS_Store
