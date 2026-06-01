@@ -89,3 +89,26 @@ Cache is written to `results/cache/{prompt_hash}_seed13_{data_stem}.jsonl`
 after every batch. Reruns resume from the last completed batch — a kernel
 kill costs at most one batch of work. To force regeneration, delete the
 cache file.
+
+---
+
+## 4. Notebooks in this Repo
+
+`run_inference.py` is the canonical entry point. The notebooks below are
+the development / research artifacts behind it. **Graders only need
+`run_inference.py`** — the notebooks are for reading the pipeline
+interactively or rerunning specific experiments.
+
+| Notebook | Pipeline | Data | Purpose |
+|---|---|---|---|
+| `starter_code_cse151b_comp.ipynb` | **v2.9.3 baseline** | `data/public.jsonl` | Eval notebook — runs the baseline on the 100-question tailored subset with scoring + diagnostics. Use this to reproduce our eval numbers. |
+| `starter_code_cse151b_comp_submission.ipynb` | **v2.9.3 baseline** | `data/private.jsonl` | **Submission notebook — what generated the shipped CSV.** Identical pipeline to the eval notebook minus the scoring cells, plus a CSV writer at the end. Functionally equivalent to `run_inference.py`. |
+| `starter_code_cse151b_comp_sft.ipynb` | **v2.9.2-sft baseline + LoRA adapter** | `data/public.jsonl` | SFT eval — same pipeline as `starter_code_cse151b_comp.ipynb` but with a QLoRA adapter loaded via vLLM's `LoRARequest`. Diverges from baseline cell 17 config (max_model_len=49152, enforce_eager=True) to avoid a known vLLM + LoRA + bnb crash on 24 GB GPUs. Used to evaluate whether the SFT adapter improved over baseline. |
+| `starter_code_cse151b_comp_submission_sft.ipynb` | **v2.9.2-sft + LoRA** | `data/private.jsonl` | SFT submission variant. Generates an alternate CSV using the LoRA adapter. Not shipped (final submission used the baseline pipeline). |
+| `starter_code_cse151b_comp_submission_sft_bigbudget.ipynb` | **v2.9.2-sft + LoRA, restored olympiad budget** | `data/private.jsonl` | Experimental SFT submission variant. Restores `max_model_len=90112` + `MAX_TOKENS_OLYMPIAD=81920` by halving `max_num_seqs` to 16 — tries to give olympiad items full token budget while keeping LoRA stable. Not shipped. |
+| `train_lora.ipynb` | **QLoRA SFT training** | `OpenR1-Math-220k` (HuggingFace) | Trains the LoRA adapter that the SFT notebooks load. Output checkpoint pushed to `daniel930324/qwen3-4b-math-lora` on HF Hub. |
+
+All inference notebooks share the same cell IDs for preprocessing
+(`da74ab54`), prompt router (`8bd056bc`), and generation loop (`caa6d179`) —
+edits to one should be propagated to the others to maintain the
+"identical pipeline, different config" invariant.
